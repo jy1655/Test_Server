@@ -90,10 +90,15 @@ docker-compose logs -f app
 |------|--------|------|
 | `SERVER_HOST` | `0.0.0.0` | 서버 바인딩 주소 |
 | `SERVER_PORT` | `8080` | 서버 포트 |
-| `JWT_SECRET` | ⚠️ 필수 | JWT 서명 시크릿 키 |
+| `JWT_SECRET` | `change-this-secret-key-in-production` | JWT 서명 시크릿 키 (기본값은 개발용, 프로덕션에서 반드시 교체) |
 | `JWT_EXPIRY` | `24h` | JWT 토큰 유효기간 |
 | `DB_PATH` | `./users.db` | SQLite DB 경로 |
 | `ALLOWED_ORIGINS` | `*` | CORS 허용 도메인 |
+| `RATE_LIMIT` | `100` | 초당 요청 제한 |
+| `HANDSHAKE_TIMEOUT` | `10s` | WebSocket 핸드셰이크 대기 시간 |
+| `MAX_MESSAGE_SIZE` | `65536` | WebSocket 최대 메시지 크기 (바이트) |
+| `ENABLE_IP_WHITELIST` | `false` | IP 화이트리스트 활성화 여부 |
+| `ALLOWED_NETWORKS` | `0.0.0.0/0` | 허용할 CIDR 목록 (`,`로 구분) |
 | `TURN_SERVER` | - | TURN 서버 주소 |
 | `TURN_USERNAME` | - | TURN 인증 사용자명 |
 | `TURN_PASSWORD` | - | TURN 인증 비밀번호 |

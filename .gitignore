@@ -5,6 +5,7 @@
 *.so
 *.dylib
 oculo-pilot-server
+oculo-pilot-server-linux
 
 # Test binary
 *.test
