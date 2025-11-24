@@ -3,27 +3,17 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"oculo-pilot-server/auth"
 )
-
-// RegisterRequest represents user registration request
-type RegisterRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// RegisterService interface for user registration
-type RegisterService interface {
-	Register(req *RegisterRequest) (interface{}, error)
-}
 
 // RegisterHandler handles user registration
 type RegisterHandler struct {
-	registerService RegisterService
+	authService *auth.Service
 }
 
 // NewRegisterHandler creates a new register handler
-func NewRegisterHandler(registerService RegisterService) *RegisterHandler {
-	return &RegisterHandler{registerService: registerService}
+func NewRegisterHandler(authService *auth.Service) *RegisterHandler {
+	return &RegisterHandler{authService: authService}
 }
 
 // ServeHTTP handles registration requests
@@ -33,13 +23,13 @@ func (h *RegisterHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req RegisterRequest
+	var req auth.CreateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	user, err := h.registerService.Register(&req)
+	user, err := h.authService.Register(&req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

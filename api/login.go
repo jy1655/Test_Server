@@ -3,32 +3,16 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"oculo-pilot-server/auth"
 )
-
-// AuthService interface for authentication operations
-type AuthService interface {
-	Login(req *LoginRequest) (*LoginResponse, error)
-}
-
-// LoginRequest represents login request
-type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// LoginResponse represents login response
-type LoginResponse struct {
-	Token string      `json:"token"`
-	User  interface{} `json:"user"`
-}
 
 // LoginHandler handles user login
 type LoginHandler struct {
-	authService AuthService
+	authService *auth.Service
 }
 
 // NewLoginHandler creates a new login handler
-func NewLoginHandler(authService AuthService) *LoginHandler {
+func NewLoginHandler(authService *auth.Service) *LoginHandler {
 	return &LoginHandler{authService: authService}
 }
 
@@ -39,7 +23,7 @@ func (h *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req LoginRequest
+	var req auth.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
