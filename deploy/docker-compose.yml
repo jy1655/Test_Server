@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Go WebSocket server
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: oculo-pilot-server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8080
+      - JWT_SECRET=${JWT_SECRET:-change-this-secret-key-in-production}
+      - JWT_EXPIRY=24h
+      - DB_PATH=/data/users.db
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - RATE_LIMIT=100
+      - TURN_SERVER=${TURN_SERVER:-turn:localhost:3478}
+      - TURN_USERNAME=${TURN_USERNAME:-username}
+      - TURN_PASSWORD=${TURN_PASSWORD:-password}
+    volumes:
+      - app-data:/data
+    networks:
+      - oculo-network
+    depends_on:
+      - coturn
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # TURN server for NAT traversal
+  coturn:
+    image: coturn/coturn:latest
+    container_name: oculo-coturn
+    restart: unless-stopped
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+      - "49152-65535:49152-65535/udp"
+    volumes:
+      - ./coturn.conf:/etc/coturn/turnserver.conf:ro
+    networks:
+      - oculo-network
+    command: -c /etc/coturn/turnserver.conf
+
+  # Nginx reverse proxy (optional, for SSL)
+  nginx:
+    image: nginx:alpine
+    container_name: oculo-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    networks:
+      - oculo-network
+    depends_on:
+      - app
+
+volumes:
+  app-data:
+
+networks:
+  oculo-network:
+    driver: bridge
