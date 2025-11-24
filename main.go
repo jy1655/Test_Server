@@ -63,7 +63,9 @@ func main() {
 	router.Handle("/api/register", api.NewRegisterHandler(authService)).Methods("POST", "OPTIONS")
 
 	// WebSocket endpoint (requires auth)
-	wsHandler := websocket.NewHandler(hub, &authValidator{authService})
+	wsHandler := websocket.NewHandler(hub, &authValidator{authService},
+		cfg.Server.AllowedNetworks, cfg.Server.EnableIPWhitelist,
+		cfg.Server.HandshakeTimeout, cfg.Server.MaxMessageSize)
 	router.Handle("/ws", wsHandler)
 
 	// Static files
@@ -74,6 +76,11 @@ func main() {
 	log.Printf("🚀 Server starting on %s", addr)
 	log.Printf("🔐 JWT expiry: %v", cfg.Auth.JWTExpiry)
 	log.Printf("🌐 Allowed origins: %v", cfg.Server.AllowedOrigins)
+	if cfg.Server.EnableIPWhitelist {
+		log.Printf("🔒 IP whitelist enabled: %v", cfg.Server.AllowedNetworks)
+	}
+	log.Printf("⏱️  Handshake timeout: %v", cfg.Server.HandshakeTimeout)
+	log.Printf("📦 Max message size: %d bytes", cfg.Server.MaxMessageSize)
 
 	// Graceful shutdown
 	stop := make(chan os.Signal, 1)

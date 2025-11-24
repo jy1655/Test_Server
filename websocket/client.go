@@ -3,6 +3,7 @@ package websocket
 import (
 	"encoding/json"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -17,19 +18,17 @@ const (
 
 	// Send pings to peer with this period (must be less than pongWait)
 	pingPeriod = (pongWait * 9) / 10
-
-	// Maximum message size allowed from peer
-	maxMessageSize = 65536 // 64KB
 )
 
 // ClientType represents the type of WebSocket client
 type ClientType string
 
 const (
-	ClientTypeWeb     ClientType = "web"      // Web browser client
-	ClientTypeVideo   ClientType = "video"    // Video streaming client (Raspberry Pi)
-	ClientTypeControl ClientType = "control"  // Control client (Raspberry Pi)
-	ClientTypePending ClientType = "pending"  // Not yet identified
+	ClientTypeWeb       ClientType = "web"       // Web browser client
+	ClientTypeVideo     ClientType = "video"     // Video streaming client (Raspberry Pi)
+	ClientTypeControl   ClientType = "control"   // Control client (Raspberry Pi)
+	ClientTypeTelemetry ClientType = "telemetry" // Telemetry client (GPS/sensors)
+	ClientTypePending   ClientType = "pending"   // Not yet identified
 )
 
 // Client represents a WebSocket client connection
@@ -43,7 +42,7 @@ type Client struct {
 	// Buffered channel of outbound messages
 	send chan []byte
 
-	// Client type (web, video, control)
+	// Client type (web, video, control, telemetry)
 	clientType ClientType
 
 	// User ID (if authenticated)
@@ -51,17 +50,28 @@ type Client struct {
 
 	// Username (if authenticated)
 	username string
+
+	// Connection ID for handshake validation
+	connectionID string
+
+	// Maximum message size allowed from peer
+	maxMessageSize int64
+
+	// Handshake completion flag (protected by handshakeMu)
+	handshakeComplete bool
+	handshakeMu       sync.RWMutex
 }
 
 // NewClient creates a new WebSocket client
-func NewClient(hub *Hub, conn *websocket.Conn, clientType ClientType, userID int64, username string) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, clientType ClientType, userID int64, username string, maxMessageSize int64) *Client {
 	return &Client{
-		hub:        hub,
-		conn:       conn,
-		send:       make(chan []byte, 256),
-		clientType: clientType,
-		userID:     userID,
-		username:   username,
+		hub:            hub,
+		conn:           conn,
+		send:           make(chan []byte, 256),
+		clientType:     clientType,
+		userID:         userID,
+		username:       username,
+		maxMessageSize: maxMessageSize,
 	}
 }
 
@@ -73,7 +83,7 @@ func (c *Client) readPump() {
 	}()
 
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetReadLimit(maxMessageSize)
+	c.conn.SetReadLimit(c.maxMessageSize)
 	c.conn.SetPongHandler(func(string) error {
 		c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		return nil
@@ -156,4 +166,28 @@ func (c *Client) SendJSON(v interface{}) error {
 func (c *Client) Run() {
 	go c.writePump()
 	go c.readPump()
+}
+
+// SetConnectionID sets the connection ID for handshake validation
+func (c *Client) SetConnectionID(id string) {
+	c.connectionID = id
+}
+
+// GetConnectionID returns the connection ID
+func (c *Client) GetConnectionID() string {
+	return c.connectionID
+}
+
+// MarkHandshakeComplete marks the handshake as complete
+func (c *Client) MarkHandshakeComplete() {
+	c.handshakeMu.Lock()
+	defer c.handshakeMu.Unlock()
+	c.handshakeComplete = true
+}
+
+// IsHandshakeComplete returns whether handshake is complete
+func (c *Client) IsHandshakeComplete() bool {
+	c.handshakeMu.RLock()
+	defer c.handshakeMu.RUnlock()
+	return c.handshakeComplete
 }

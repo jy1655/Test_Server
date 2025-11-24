@@ -24,37 +24,75 @@ type Hub struct {
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[ClientType]map[*Client]bool),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
+		register:   make(chan *Client, 10),   // Buffered channel to prevent blocking
+		unregister: make(chan *Client, 10),   // Buffered channel to prevent blocking
 	}
 }
 
 // Run starts the hub's main loop
 func (h *Hub) Run() {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("🚨 Hub.Run() panic recovered: %v", r)
+		}
+	}()
+
 	for {
 		select {
 		case client := <-h.register:
+			log.Printf("📥 Processing register for %s (type=%s)", client.username, client.clientType)
 			h.mu.Lock()
 			if h.clients[client.clientType] == nil {
 				h.clients[client.clientType] = make(map[*Client]bool)
 			}
 			h.clients[client.clientType][client] = true
+			// Calculate count without calling GetClientCount() to avoid potential issues
+			count := 0
+			for _, clients := range h.clients {
+				count += len(clients)
+			}
 			h.mu.Unlock()
 
 			log.Printf("Client registered: type=%s, user=%s (total: %d)",
-				client.clientType, client.username, h.GetClientCount())
+				client.clientType, client.username, count)
 
 		case client := <-h.unregister:
+			log.Printf("📤 Processing unregister for %s (type=%s)", client.username, client.clientType)
+			log.Printf("🔒 Attempting to lock mutex for unregister...")
 			h.mu.Lock()
+			log.Printf("✅ Mutex locked for unregister")
 			if clients, ok := h.clients[client.clientType]; ok {
 				if _, ok := clients[client]; ok {
 					delete(clients, client)
-					close(client.send)
+					log.Printf("🗑️  Deleted client from map, about to close send channel...")
+
+					// Safely close channel with panic recovery
+					func() {
+						defer func() {
+							if r := recover(); r != nil {
+								log.Printf("🚨 Panic while closing send channel: %v", r)
+							}
+						}()
+						close(client.send)
+						log.Printf("✅ Send channel closed successfully")
+					}()
+
+					// Calculate count without calling GetClientCount() to avoid deadlock
+					count := 0
+					for _, clients := range h.clients {
+						count += len(clients)
+					}
 					log.Printf("Client unregistered: type=%s, user=%s (total: %d)",
-						client.clientType, client.username, h.GetClientCount())
+						client.clientType, client.username, count)
+				} else {
+					log.Printf("⚠️  Client not found in map for unregister: %s", client.username)
 				}
+			} else {
+				log.Printf("⚠️  Client type map not found for unregister: %s", client.clientType)
 			}
+			log.Printf("🔓 About to unlock mutex...")
 			h.mu.Unlock()
+			log.Printf("✅ Mutex unlocked")
 		}
 	}
 }
@@ -134,6 +172,7 @@ func (h *Hub) GetStats() map[string]interface{} {
 	stats["web"] = len(h.clients[ClientTypeWeb])
 	stats["video"] = len(h.clients[ClientTypeVideo])
 	stats["control"] = len(h.clients[ClientTypeControl])
+	stats["telemetry"] = len(h.clients[ClientTypeTelemetry])
 	stats["pending"] = len(h.clients[ClientTypePending])
 
 	return stats

@@ -19,10 +19,14 @@ type Config struct {
 
 // ServerConfig holds server configuration
 type ServerConfig struct {
-	Host           string
-	Port           string
-	AllowedOrigins []string
-	RateLimit      int
+	Host                 string
+	Port                 string
+	AllowedOrigins       []string
+	AllowedNetworks      []string // IP whitelist (CIDR format)
+	RateLimit            int
+	HandshakeTimeout     time.Duration
+	EnableIPWhitelist    bool
+	MaxMessageSize       int64
 }
 
 // AuthConfig holds authentication configuration
@@ -50,10 +54,14 @@ func Load() (*Config, error) {
 
 	return &Config{
 		Server: ServerConfig{
-			Host:           getEnv("SERVER_HOST", "0.0.0.0"),
-			Port:           getEnv("SERVER_PORT", "8080"),
-			AllowedOrigins: getEnvSlice("ALLOWED_ORIGINS", ",", []string{"*"}),
-			RateLimit:      getEnvInt("RATE_LIMIT", 100),
+			Host:              getEnv("SERVER_HOST", "0.0.0.0"),
+			Port:              getEnv("SERVER_PORT", "8080"),
+			AllowedOrigins:    getEnvSlice("ALLOWED_ORIGINS", ",", []string{"*"}),
+			AllowedNetworks:   getEnvSlice("ALLOWED_NETWORKS", ",", []string{"0.0.0.0/0"}), // Allow all by default
+			RateLimit:         getEnvInt("RATE_LIMIT", 100),
+			HandshakeTimeout:  getEnvDuration("HANDSHAKE_TIMEOUT", "10s"),
+			EnableIPWhitelist: getEnvBool("ENABLE_IP_WHITELIST", false),
+			MaxMessageSize:    int64(getEnvInt("MAX_MESSAGE_SIZE", 65536)), // 64KB
 		},
 		Auth: AuthConfig{
 			JWTSecret: getEnv("JWT_SECRET", "change-this-secret-key-in-production"),
@@ -111,4 +119,18 @@ func getEnvDuration(key, defaultValue string) time.Duration {
 		duration, _ = time.ParseDuration(defaultValue)
 	}
 	return duration
+}
+
+// getEnvBool gets environment variable as bool or returns default value
+func getEnvBool(key string, defaultValue bool) bool {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+
+	boolVal, err := strconv.ParseBool(value)
+	if err != nil {
+		return defaultValue
+	}
+	return boolVal
 }
